@@ -1,15 +1,18 @@
-import sys
-import json
-
 from time import time
 from enum import Enum
 from html import unescape
 
-from pprint import pprint
-
+class PostType(Enum):
+    TEXT = 0
+    CROSSPOST = 1
+    INTERNAL_IMAGE = 2
+    INTERNAL_VIDEO = 3
+    EXTERNAL_IMAGE = 4
+    EXTERNAL_VIDEO = 5
+    EXTERNAL_LINK = 6
 
 class SourceParser:
-    def __init__(self, data, sort_by, count):
+    def __init__(self, data: dict, sort_by: str | None, count: int) -> None:
         self.data = data
         self.sort_by = sort_by
         self.count = count
@@ -18,8 +21,11 @@ class SourceParser:
         self.next_id = None
 
         self.parsed = {"urls": [], "next": None, "status": "success"}
+
+    def get_parsed(self) -> dict:
+        return self.parsed
     
-    def parse(self):
+    def parse(self) -> None:
         try:
             if not self.sort_by_is_valid():
                 raise ValueError("The 'sort_by' parameter is invalid.")
@@ -33,11 +39,11 @@ class SourceParser:
         except Exception as e:
             self.parsed = {"status": "failure", "error": f"{str(e)}"}
 
-    def gen_url(self, post):
+    def gen_url(self, post: dict) -> None:
         url_suffix = post["permalink"] # /r/subreddit/comments/id/words_in_title/
         return f"https://old.reddit.com{url_suffix}"
 
-    def gen_next_url(self, subreddit_name_prefixed):
+    def gen_next_url(self, subreddit_name_prefixed: str) -> str:
         next_id = self.data["after"]
         if self.sort_by != "":
             next = f"https://old.reddit.com/{subreddit_name_prefixed}/{self.sort_by}/?count={self.count + 25}&after={next_id}"
@@ -46,37 +52,30 @@ class SourceParser:
 
         return next
 
-    def set_fields_after_validation(self):
+    def set_fields_after_validation(self) -> None:
         # these can cause errors, any of which will be handled by try/except
         self.data = self.data["data"]
         self.post_table = self.data["children"]
         self.count = int(self.count)
 
-    def sort_by_is_valid(self):
+    def sort_by_is_valid(self) -> None:
         if self.sort_by in ["new", "rising", "controversial", "top", None]:
             if self.sort_by == None: self.sort_by = ""
 
             return True
         return False
 
-
-class PostType(Enum):
-    TEXT = 0
-    CROSSPOST = 1
-    INTERNAL_IMAGE = 2
-    INTERNAL_VIDEO = 3
-    EXTERNAL_IMAGE = 4
-    EXTERNAL_VIDEO = 5
-    EXTERNAL_LINK = 6
-
 class PostParser:
-    def __init__(self, data):
+    def __init__(self, data: dict) -> None:
         self.post_data = data[0]["data"]["children"][0]["data"]
         #comment_data = data[1]["data"]
 
         self.parsed = {"status": "success", "type": None}
+
+    def get_parsed(self) -> dict:
+        return self.parsed
     
-    def parse(self):
+    def parse(self) -> None:
         try:
             if "[deleted]" in self.post_data["selftext"]:
                 self.parsed["type"] = "deleted"
@@ -100,7 +99,7 @@ class PostParser:
         except Exception as e:
             self.parsed = {"status": "failure", "error": f"{str(e)}"}
 
-    def parse_generalised_fields(self):
+    def parse_generalised_fields(self) -> None:
         self.parsed["id"] = self.post_data["id"]
         self.parsed["title"] = self.post_data["title"]
         self.parsed["subreddit"] = self.post_data["subreddit_name_prefixed"]
@@ -122,16 +121,16 @@ class PostParser:
 
         self.parsed["crawled_at"] = int(time())
 
-    def parse_text(self, is_internal):
+    def parse_text(self, is_internal: bool) -> None:
         self.parsed["type"] = "text"
         self.parsed["is_internal"] = is_internal
 
-    def parse_crosspost(self, is_internal):
+    def parse_crosspost(self, is_internal: bool) -> None:
         self.parsed["type"] = "crosspost"
         self.parsed["is_internal"] = is_internal
         self.parsed["content"] = self.gen_link_from_suffix(self.post_data["crosspost_parent_list"][0]["permalink"])
 
-    def parse_image(self, is_internal):
+    def parse_image(self, is_internal: bool) -> None:
         self.parsed["type"] = "image"
         self.parsed["is_internal"] = is_internal
 
@@ -145,7 +144,7 @@ class PostParser:
         else:
             self.parsed["content"] = [self.post_data["url_overridden_by_dest"]]
 
-    def parse_video(self, is_internal):
+    def parse_video(self, is_internal: bool) -> None:
         self.parsed["type"] = "video"
         self.parsed["is_internal"] = is_internal
 
@@ -154,12 +153,12 @@ class PostParser:
         else:
             self.parsed["content"] = [self.post_data["url_overridden_by_dest"]]
 
-    def parse_link(self, is_internal):
+    def parse_link(self, is_internal: bool) -> None:
         self.parsed["type"] = "link"
         self.parsed["is_internal"] = is_internal
         self.parsed["content"] = [self.post_data["url"]]
 
-    def determine_post_type(self):
+    def determine_post_type(self) -> PostType:
         # https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types
         image_extensions = [".apng", ".avif", ".gif", ".gifv", ".jpg", ".jpeg", ".jfif", ".pjpeg",\
             ".pjp", ".png", ".svg", ".webp", ".bmp", ".ico", ".cur", ".tif", ".tiff"]
@@ -188,34 +187,15 @@ class PostParser:
         else:
             return PostType.EXTERNAL_VIDEO
 
-    def gen_link_from_suffix(self, link):
-        return f"https://old.reddit.com{link}"
+    def gen_link_from_suffix(self, suffix: str) -> None:
+        return f"https://old.reddit.com{suffix}"
 
 
-def is_source(data):
+def is_source(data: dict) -> bool:
     if "kind" in data:
         return True
+
     return False
-
-
-def main():
-    try:
-        f = open('page.json')
-        data = json.load(f)
-    except:
-        print("page.json not found, or invalid JSON structure.")
-
-    if is_source(data):
-        parser = SourceParser(data=data, sort_by=None, count=sys.argv[1])
-        parser.parse()
-        print(parser.parsed)
-    else:
-        pass
-    
-    f.close()
-
-if __name__ == "__main__":
-    main()
 
 """
 import requests
