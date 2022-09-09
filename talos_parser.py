@@ -35,7 +35,7 @@ class SourceParser:
         if self.sort_by != "":
             next = f"https://old.reddit.com/{subreddit_name_prefixed}/{self.sort_by}/?count={self.count + 25}&after={next_id}"
         else:
-            next = f"https://old.reddit.com/{subreddit_name_prefixed}/?count={self.count}&after={next_id}"
+            next = f"https://old.reddit.com/{subreddit_name_prefixed}/?count={self.count + 25}&after={next_id}"
 
         return next
 
@@ -52,10 +52,24 @@ class SourceParser:
             return True
         return False
 
+def is_source(data):
+    if "kind" in data:
+        return True
+    return False
 
-f = open('page.json')
-data = json.load(f)
+def main():
+    try:
+        f = open('page.json')
+        data = json.load(f)
+    except:
+        print("page.json not found, or invalid JSON structure.")
 
-parser = SourceParser(data=data, sort_by=None)
-parser.parse()
-pprint(parser.parsed) 
+    if is_source(data):
+        parser = SourceParser(data=data, sort_by=None, count=sys.argv[1])
+        parser.parse()
+        print(parser.parsed)
+    else:
+        pass
+
+if __name__ == "__main__":
+    main()
