@@ -13,10 +13,8 @@ It is designed to take Reddit JSON API data and extract a meaningful output, wit
         - External link references
         - Crosspost references
 
-<ins>Note</ins>: For this project, 'source' denotes a homepage, and 'post' denotes a specific post.
+<ins>Note</ins>: For this project, 'source' denotes a homepage, and 'post' denotes a specific post. 
 <ins>Note</ins>: Comment parsing is still TODO.
-
-
 
 
 # Usage
@@ -25,7 +23,7 @@ This section outlines quick usage. For more detail, see the documentation sectio
 ## Using the `parser.py` interface 
 Ensure that `page.json` exists.
 
-**Sources**
+### **Sources**
 ```py
 """
 count: (int) -> the ?count= parameter of the source URL, e.g.
@@ -49,8 +47,7 @@ python ./parser.py 0
 ```
 <ins>Note</ins>: `0` is an example argument. This should match the count parameter, as outlined in the docstring within the example.
 
-
-**Posts**
+### **Posts**
 ```py
 python ./parser.py
 
@@ -109,7 +106,7 @@ except:
     print("page.json not found, or invalid JSON structure.")
 
 if talos_parser.is_source(data):
-    parser = talos_parser.SourceParser(data, None, sys.argv[1])
+    parser = talos_parser.SourceParser(data=data, sort_by=None, count=0)
     parser.parse()
 else:
     parser = talos_parser.PostParser(data)
