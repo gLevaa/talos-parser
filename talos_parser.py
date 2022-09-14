@@ -1,4 +1,4 @@
-from time import time
+from time import sleep, time
 from enum import Enum
 from html import unescape
 
@@ -43,14 +43,14 @@ class SourceParser:
 
     def gen_url(self, post: dict) -> None:
         url_suffix = post["permalink"] # /r/subreddit/comments/id/words_in_title/
-        return f"https://old.reddit.com{url_suffix}"
+        return f"https://reddit.com{url_suffix}"
 
     def gen_next_url(self, subreddit_name_prefixed: str) -> str:
         next_id = self.data["after"]
         if self.sort_by != "":
-            next = f"https://old.reddit.com/{subreddit_name_prefixed}/{self.sort_by}/?count={self.count + 25}&after={next_id}"
+            next = f"https://reddit.com/{subreddit_name_prefixed}/{self.sort_by}/.json?count={self.count + 25}&after={next_id}"
         else:
-            next = f"https://old.reddit.com/{subreddit_name_prefixed}/?count={self.count + 25}&after={next_id}"
+            next = f"https://reddit.com/{subreddit_name_prefixed}/.json?count={self.count + 25}&after={next_id}"
 
         return next
 
@@ -104,9 +104,11 @@ class PostParser:
     def parse_generalised_fields(self) -> None:
         try:
             self.parsed["author_id"] = self.post_data["author_fullname"]
+            self.parsed["is_author_premium"] = self.post_data["author_premium"]
         except:
             # field DNE if deleted
             self.parsed["author_id"] = None
+            self.parsed["is_author_premium"] = False
 
         self.parsed["id"] = self.post_data["id"]
         self.parsed["title"] = self.post_data["title"]
@@ -122,7 +124,7 @@ class PostParser:
         self.parsed["is_over_18"] = self.post_data["over_18"]
         self.parsed["is_quarantined"] = self.post_data["quarantine"]
         self.parsed["is_locked"] = self.post_data["locked"]
-        self.parsed["is_author_premium"] = self.post_data["author_premium"]
+        
 
         self.parsed["published_at"] = int(self.post_data["created"])
         self.parsed["post_link"] = self.gen_link_from_suffix(self.post_data["permalink"])
@@ -200,46 +202,50 @@ class PostParser:
             return PostType.EXTERNAL_VIDEO
 
     def gen_link_from_suffix(self, suffix: str) -> None:
-        return f"https://old.reddit.com{suffix}"
+        return f"https://reddit.com{suffix}"
 
 class CommentParser:
-    def __init__(self, data):
+    def __init__(self, data: dict) -> None:
         self.comment_data = data[1]["data"]["children"]
         self.parsed = {"errors":[], "comments":[]}
 
-    def get_parsed(self):
+    def get_parsed(self) -> dict:
         return self.parsed
 
-    def parse(self):
+    def parse(self) -> None:
         for root_comment in self.comment_data:
             self.recursive_parse(root_comment)
 
-    def recursive_parse(self, root):
+    def recursive_parse(self, root: dict) -> None:
+        if root["kind"] != "t1": # comment identifier
+            return
+        
+        self.parse_comment(root["data"])
+        
         try:
-            data = root["data"]
-            
-            self.parse_comment(data)
-            
-            if len(data["replies"]) >= 1:
-                children = data["replies"]["data"]["children"]
-                for child in children:
-                    self.recursive_parse(child)
+            children = root["data"]["replies"]["data"]["children"]
+            for child in children:
+                self.recursive_parse(child)
+        except TypeError:
+            # in the case of no child comments
+            pass
         except Exception as e:
             self.parsed["errors"].append(str(e))
     
     
-    def parse_comment(self, comment_data):
+    def parse_comment(self, comment_data: dict) -> None:
         parsed_comment = {}
         try:
             if "t3" in comment_data["parent_id"]:
+                # parent is the post
                 parsed_comment["parent_id"] = None
             else:
                 parsed_comment["parent_id"] = comment_data["parent_id"]
 
-            if comment_data["body"] == "[removed]":
-                # author_premium: DNE, author_fullname DNE in this case -> causes exception
-                parsed_comment["is_author_premium"] = False
+            if "author_fullname" not in comment_data:
+                # deleted comment
                 parsed_comment["author_id"]         = None
+                parsed_comment["is_author_premium"] = False
             else:
                 parsed_comment["author_id"]         = comment_data["author_fullname"]
                 parsed_comment["is_author_premium"] = comment_data["author_premium"]
@@ -252,16 +258,16 @@ class CommentParser:
             parsed_comment["num_awards"]        = comment_data["total_awards_received"]
             parsed_comment["published_at"]      = int(comment_data["created"])
             parsed_comment["is_controversial"]  = bool(comment_data["controversiality"])
-            parsed_comment["is_score_hidden"]   = comment_data["score_hidden"]
+            parsed_comment["is_score_hidden"]   = comment_data["score_hidden"] # upvotes = -1 if hidden?
             parsed_comment["is_locked"]         = comment_data["locked"]
-            parsed_comment["permalink"]         = comment_data["permalink"]
+            parsed_comment["permalink"]         = comment_data["permalink"] # convert to link
 
             if len(comment_data["replies"]) == 0:
                 parsed_comment["num_children"] = 0
             else:
                 parsed_comment["num_children"] = len(comment_data["replies"]["data"]["children"])
 
-            self.parsed.append(parsed_comment)
+            self.parsed["comments"].append(parsed_comment)
         except Exception as e:
             self.parsed["errors"].append(str(e))
 
@@ -271,22 +277,25 @@ def is_source(data: dict) -> bool:
 
     return False
 
+
 """
 import json
 import requests
-def test():
-    result = {}
-
+result = {"sources":[]}
+def test(iter=0, count=0):
     try:
         f = open('page.json')
         data = json.load(f)
     except:
         print("page.json not found, or invalid JSON structure.")
+        exit()
     
     # data = homepage
-    s_parser = SourceParser(data, None, 0)
+    s_parser = SourceParser(data, None, 25*iter)
     s_parser.parse()
-    result["source"] = s_parser.get_parsed()
+    count += 1
+    print(count)
+    result["sources"].append(s_parser.get_parsed())
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'}
     for url in s_parser.parsed["urls"]:
@@ -300,15 +309,33 @@ def test():
         parser.parse()
         result[url] = parser.get_parsed()
 
+        count +=1
+        print(count)
+
         g.close()
+
+        sleep(2)
+    
+    r = requests.get(s_parser.parsed["next"], headers=headers)
+    open('page.json', 'wb').write(r.content)
 
     f.close()
 
+    if iter == 2:
+        return
+    
+    test(iter + 1, count)
+try:
+    test()
+except Exception as e:
     result = json.dumps(result)
     with open("output.json", "w") as o:
         o.write(result)
+    raise(e)
 
-test()
+result = json.dumps(result)
+with open("output.json", "w") as o:
+    o.write(result)
 
 import json
 try:
@@ -317,10 +344,12 @@ try:
 except:
     print("page.json not found, or invalid JSON structure.")
 
-p = CommentParser(data)
+p = PostParser(data)
 p.parse()
-pprint(p.get_parsed())
 
-#result = json.dumps(p.get_parsed())
-#with open("output.json", "w") as o:
-#    o.write(result)"""
+result = json.dumps(p.get_parsed())
+with open("output.json", "w") as o:
+    o.write(result)
+
+print("done")
+"""
