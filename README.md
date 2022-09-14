@@ -54,26 +54,45 @@ python ./parser.py
 # Successful parse
 python ./parser.py
 {'crawled_at': int, # Unix/Epoch time, used for talos crawler
- 'flair': 'flair',
- 'id': 'id',
- 'is_author_premium': True/False,
- 'is_internal': True/False, # is content hosted on Reddit
- 'is_locked': True/False,
- 'is_over_18': True/False,
- 'is_quarantined': True/False,
+ 'flair': str | None,
+ 'id': str,
+ 'is_author_premium': bool,
+ 'is_internal': bool, # is content hosted on Reddit
+ 'is_locked': bool,
+ 'is_over_18': bool,
+ 'is_quarantined': bool,
  'num_comments': int,
  'num_crossposts': int,
  'num_rewards': int,
- 'post_link': 'https://old.reddit.com/r/sub/comments/id/title',
+ 'post_link': str,
  'published_at': int, # Unix/Epoch time
- 'status': 'success',
- 'subreddit': 'r/sub',
- 'text': '',
- 'title': 'title',
- 'type': 'text',
+ 'status': str,
+ 'subreddit': str, # r/sub
+ 'text': str,
+ 'title': str,
+ 'type': PostType (enum),
  'upvote_ratio': float,
  'upvotes': int 
- 'comments': []} # TODO
+ 'errors': []
+ 'comments': [
+    {
+        "parent_id": str
+        "author_id": str
+        "is_author_premium": bool
+        "id": str
+        "text": str
+        "subreddit": str # r/sub
+        "upvotes": int,
+        "depth": int, # comment depth, root = 0, child = 1
+        "num_awards": 0,
+        "published_at": int, # Epoch/Unix time
+        "is_controversial": bool,
+        "is_score_hidden": bool,
+        "is_locked": bool,
+        "permalink": str
+        "num_children": int
+    }, ...
+ ]} 
 
 # Failed parse
 python ./parser.py
@@ -88,12 +107,16 @@ Again, ensure `page.json` exists.
 
 `talos_parser.py` itself contains the following;
 - ``SourceParser(data: dict, sort_by: str | None, count: int): class``
-- ``PostParser: class``
+- ``PostParser(data: dict): class``
+- ``CommentParser(data: dict): class``
 - ``is_source(data: dict) -> bool``
+- ``PostType(Enum)``
+
+In all cases, ``data`` is the returned JSON API call.
 
 For ``SourceParser``, `sort_by` is the Reddit URL sort, i.e. `"new", "rising", "controversial", "top", None`. It must match the source URL.
 
-For ``PostParser``, no arguments are required.
+For ``PostParser``, ``CommentParser`` is called automatically.
 
 ```py
 import talos_parser
@@ -114,21 +137,8 @@ else:
 
 pprint(parser.get_parsed()) # print() works equally
 ```
-
-
-
-<!--
-### **Sources**
-`talos_parser.py (int)count`
-- `(int)count` = the GET count parameter (e.g. `reddit.com/` =  0, `/?count=25` = 25)
-
-
-
-In the case of a successful parse, the output will be; <br>
-`{'status': 'success', 'next': 'link_to_next', 'urls': ['url1', ..., 'url25']}`
-
-In the case of a failed parse, the output will be;<br>
-`{'status': 'failure', 'error': "exception"}`
-
-### **Posts**
-TODO
+## Use case: Python based Reddit scraper
+Using the talos parser, a Python based web scraper can be made easily.
+```py
+# TODO
+```
