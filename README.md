@@ -14,7 +14,6 @@ It is designed to take Reddit JSON API data and extract a meaningful output, wit
         - Crosspost references
 
 <ins>Note</ins>: For this project, 'source' denotes a homepage, and 'post' denotes a specific post. 
-<ins>Note</ins>: Comment parsing is still TODO.
 
 
 # Usage
@@ -137,8 +136,77 @@ else:
 
 pprint(parser.get_parsed()) # print() works equally
 ```
+
 ## Use case: Python based Reddit scraper
-Using the talos parser, a Python based web scraper can be made easily.
+Using the talos parser, a Python based Reddit scraper can be made relatively easily.
 ```py
-# TODO
+from talos_parser import SourceParser, PostParser
+
+import json
+import requests
+from time import sleep
+
+ITERATIONS = 1 # crawl one source page of posts
+SEED = "https://reddit.com/r/newzealand/new/.json"
+
+headers = {'User-Agent': '...'}
+def fetch_content(url=SEED):
+    req = requests.get(url, headers=headers)
+    open('page.json', 'wb').write(req.content)
+
+
+def fetch_data():
+    current_page = open('page.json')
+    data = json.load(current_page)
+    current_page.close()
+
+    return data
+
+
+def crawl(result, iteration=1, page_count=0):
+    try:
+        fetch_content(result["sources"][-1])
+    except:
+        fetch_content() # trigger SEED default param
+    
+    data = fetch_data()
+
+    # At the start of crawl(), page.json will always be a source
+    source_parser = SourceParser(data, "new", (iteration-1)*25)
+    source_parser.parse()
+    source = source_parser.get_parsed()
+
+    result["sources"].append(source["next"])
+
+    page_count += 1
+
+    for post in source["urls"]:
+        fetch_content(post)
+        data = fetch_data()
+
+        post_parser = PostParser(data)
+        post_parser.parse()
+        result[post] = post_parser.get_parsed()
+
+        page_count += 1
+        sleep(2)
+    
+    fetch_content(source["next"])
+
+    if iteration == ITERATIONS:
+        try:
+            result = json.dumps(result)
+            with open("output.json", "w") as output:
+                output.write(result)
+        except:
+            print("Could not write to file")
+            print(result)
+        return
+    
+    crawl(result, iteration + 1, page_count)
+
+
+result = {"sources":[]}
+crawl(result)
 ```
+The output for this crawl can be found [here](https://raw.githubusercontent.com/gLevaa/talos-parser/main/crawl_output.json). I recommend [this tool](http://json.parser.online.fr/) for formatting the JSON into a readable, interactive format.
