@@ -43,7 +43,7 @@ class SourceParser:
 
     def gen_url(self, post: dict) -> None:
         url_suffix = post["permalink"] # /r/subreddit/comments/id/words_in_title/
-        return f"https://reddit.com{url_suffix}"
+        return f"https://reddit.com{url_suffix}.json"
 
     def gen_next_url(self, subreddit_name_prefixed: str) -> str:
         next_id = self.data["after"]
